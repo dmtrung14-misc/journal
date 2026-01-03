@@ -2,7 +2,13 @@ import fs from 'fs'
 import path from 'path'
 import matter from 'gray-matter'
 import { stripMarkdown } from './markdown'
-import { createOrUpdateFile, deleteFile, isGitHubEnabled } from './github'
+import {
+  uploadToCloudinary,
+  getFileFromCloudinary,
+  listFilesFromCloudinary,
+  deleteFileFromCloudinary,
+  isCloudinaryEnabled,
+} from './cloudinary'
 
 const postsDirectory = path.join(process.cwd(), 'content', 'posts')
 
@@ -14,21 +20,55 @@ export interface Post {
   content: string
 }
 
-export function getPostSlugs(): string[] {
+export async function getPostSlugs(): Promise<string[]> {
+  // Use Cloudinary if enabled, otherwise file system (local dev)
+  if (isCloudinaryEnabled()) {
+    try {
+      const slugs = await listFilesFromCloudinary('journal/posts')
+      return slugs
+    } catch (error) {
+      console.error('Error fetching posts from Cloudinary:', error)
+      return []
+    }
+  }
+
+  // Fallback to file system (local development only)
   if (!fs.existsSync(postsDirectory)) {
     fs.mkdirSync(postsDirectory, { recursive: true })
     return []
   }
-  return fs.readdirSync(postsDirectory).filter((file) => file.endsWith('.md'))
+  return fs.readdirSync(postsDirectory)
+    .filter((file) => file.endsWith('.md'))
+    .map((file) => file.replace(/\.md$/, ''))
 }
 
-export function getPostBySlug(slug: string): Post | null {
-  try {
-    const fullPath = path.join(postsDirectory, `${slug}.md`)
-    if (!fs.existsSync(fullPath)) {
+export async function getPostBySlug(slug: string): Promise<Post | null> {
+  let fileContents: string | null = null
+
+  // Try Cloudinary first
+  if (isCloudinaryEnabled()) {
+    try {
+      fileContents = await getFileFromCloudinary(`journal/posts/${slug}`)
+    } catch (error) {
+      console.error('Error fetching post from Cloudinary:', error)
+    }
+  }
+
+  // Fallback to file system
+  if (!fileContents) {
+    try {
+      const fullPath = path.join(postsDirectory, `${slug}.md`)
+      if (!fs.existsSync(fullPath)) {
+        return null
+      }
+      fileContents = fs.readFileSync(fullPath, 'utf8')
+    } catch (error) {
+      console.error('Error reading post from file system:', error)
       return null
     }
-    const fileContents = fs.readFileSync(fullPath, 'utf8')
+  }
+
+  try {
     const { data, content } = matter(fileContents)
 
     // Strip markdown from excerpt for preview
@@ -51,15 +91,16 @@ export function getPostBySlug(slug: string): Post | null {
   }
 }
 
-export function getPosts(): Post[] {
-  const slugs = getPostSlugs()
-  const posts = slugs
-    .map((slug) => getPostBySlug(slug.replace(/\.md$/, '')))
+export async function getPosts(): Promise<Post[]> {
+  const slugs = await getPostSlugs()
+  const posts = await Promise.all(
+    slugs.map((slug) => getPostBySlug(slug))
+  )
+  return posts
     .filter((post): post is Post => post !== null)
     .sort((a, b) => {
       return new Date(b.date).getTime() - new Date(a.date).getTime()
     })
-  return posts
 }
 
 export async function savePost(slug: string, title: string, content: string, excerpt?: string): Promise<void> {
@@ -79,7 +120,20 @@ export async function savePost(slug: string, title: string, content: string, exc
   const fileContent = matter.stringify(content, frontMatter)
   const filePath = `content/posts/${slug}.md`
 
-  // Use GitHub API in production, file system in development
+  // Try Cloudinary first (if enabled)
+  if (isCloudinaryEnabled()) {
+    try {
+      const buffer = Buffer.from(fileContent, 'utf8')
+      const result = await uploadToCloudinary(buffer, `${slug}.md`, 'journal/posts')
+      // Store successfully in Cloudinary
+      return
+    } catch (error) {
+      console.error('Error saving to Cloudinary, falling back:', error)
+      // Fall through to GitHub/file system
+    }
+  }
+
+  // Use GitHub API if enabled
   if (isGitHubEnabled()) {
     const success = await createOrUpdateFile(
       filePath,
@@ -100,16 +154,11 @@ export async function savePost(slug: string, title: string, content: string, exc
 }
 
 export async function deletePost(slug: string): Promise<void> {
-  const filePath = `content/posts/${slug}.md`
-
-  // Use GitHub API in production, file system in development
-  if (isGitHubEnabled()) {
-    const success = await deleteFile(filePath, `Delete post: ${slug}`)
-    if (!success) {
-      throw new Error('Failed to delete post via GitHub API')
-    }
+  // Use Cloudinary in production, file system in local development
+  if (isCloudinaryEnabled()) {
+    await deleteFileFromCloudinary(`journal/posts/${slug}`)
   } else {
-    // Local file system (development)
+    // Local file system (development only)
     const localPath = path.join(postsDirectory, `${slug}.md`)
     if (fs.existsSync(localPath)) {
       fs.unlinkSync(localPath)

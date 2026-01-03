@@ -5,7 +5,7 @@ import { format } from 'date-fns'
 import Link from 'next/link'
 
 export async function generateStaticParams() {
-  const slugs = getPostSlugs()
+  const slugs = await getPostSlugs()
   return slugs.map((slug) => ({
     slug: slug.replace(/\.md$/, ''),
   }))
@@ -16,7 +16,7 @@ export default async function PostPage({
 }: {
   params: { slug: string }
 }) {
-  const post = getPostBySlug(params.slug)
+  const post = await getPostBySlug(params.slug)
 
   if (!post) {
     notFound()

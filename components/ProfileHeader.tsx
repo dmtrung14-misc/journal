@@ -2,7 +2,7 @@ import { getProfile } from '@/lib/profile'
 import Image from 'next/image'
 
 export default async function ProfileHeader() {
-  const profile = getProfile()
+  const profile = await getProfile()
 
   return (
     <div className="mb-12">

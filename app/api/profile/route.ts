@@ -20,7 +20,7 @@ async function verifyAuth(request: NextRequest): Promise<boolean> {
 
 export async function GET() {
   try {
-    const profile = getProfile()
+    const profile = await getProfile()
     return NextResponse.json(profile)
   } catch (error) {
     return NextResponse.json(

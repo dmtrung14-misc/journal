@@ -1,6 +1,10 @@
 import fs from 'fs'
 import path from 'path'
-import { createOrUpdateFile, isGitHubEnabled } from './github'
+import {
+  uploadToCloudinary,
+  getFileFromCloudinary,
+  isCloudinaryEnabled,
+} from './cloudinary'
 
 const profilePath = path.join(process.cwd(), 'content', 'profile.json')
 
@@ -24,7 +28,20 @@ const defaultProfile: Profile = {
   following: 0,
 }
 
-export function getProfile(): Profile {
+export async function getProfile(): Promise<Profile> {
+  // Try Cloudinary first
+  if (isCloudinaryEnabled()) {
+    try {
+      const content = await getFileFromCloudinary('journal/profile.json')
+      if (content) {
+        return { ...defaultProfile, ...JSON.parse(content) }
+      }
+    } catch (error) {
+      console.error('Error reading profile from Cloudinary:', error)
+    }
+  }
+
+  // Fallback to file system
   try {
     if (fs.existsSync(profilePath)) {
       const content = fs.readFileSync(profilePath, 'utf8')
@@ -38,22 +55,16 @@ export function getProfile(): Profile {
 
 export async function saveProfile(profile: Partial<Profile>): Promise<void> {
   try {
-    const currentProfile = getProfile()
+    const currentProfile = await getProfile()
     const updatedProfile = { ...currentProfile, ...profile }
     const content = JSON.stringify(updatedProfile, null, 2)
 
-    // Use GitHub API in production, file system in development
-    if (isGitHubEnabled()) {
-      const success = await createOrUpdateFile(
-        'content/profile.json',
-        content,
-        'Update profile'
-      )
-      if (!success) {
-        throw new Error('Failed to save profile via GitHub API')
-      }
+    // Use Cloudinary in production, file system in local development
+    if (isCloudinaryEnabled()) {
+      const buffer = Buffer.from(content, 'utf8')
+      await uploadToCloudinary(buffer, 'profile.json', 'journal')
     } else {
-      // Local file system (development)
+      // Local file system (development only)
       const dir = path.dirname(profilePath)
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true })
@@ -65,4 +76,3 @@ export async function saveProfile(profile: Partial<Profile>): Promise<void> {
     throw error
   }
 }
-
