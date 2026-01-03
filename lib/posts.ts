@@ -1,16 +1,7 @@
-import fs from 'fs'
-import path from 'path'
 import matter from 'gray-matter'
 import { stripMarkdown } from './markdown'
-import {
-  uploadToCloudinary,
-  getFileFromCloudinary,
-  listFilesFromCloudinary,
-  deleteFileFromCloudinary,
-  isCloudinaryEnabled,
-} from './cloudinary'
-
-const postsDirectory = path.join(process.cwd(), 'content', 'posts')
+import { getFirestoreDB, isFirebaseEnabled } from './firebase'
+import { collection, doc, getDoc, getDocs, setDoc, deleteDoc } from 'firebase/firestore'
 
 export interface Post {
   slug: string
@@ -21,58 +12,44 @@ export interface Post {
 }
 
 export async function getPostSlugs(): Promise<string[]> {
-  // Use Cloudinary if enabled, otherwise file system (local dev)
-  if (isCloudinaryEnabled()) {
-    try {
-      const slugs = await listFilesFromCloudinary('journal/posts')
-      return slugs
-    } catch (error) {
-      console.error('Error fetching posts from Cloudinary:', error)
-      return []
-    }
-  }
-
-  // Fallback to file system (local development only)
-  if (!fs.existsSync(postsDirectory)) {
-    fs.mkdirSync(postsDirectory, { recursive: true })
-    return []
-  }
-  return fs.readdirSync(postsDirectory)
-    .filter((file) => file.endsWith('.md'))
-    .map((file) => file.replace(/\.md$/, ''))
-}
-
-export async function getPostBySlug(slug: string): Promise<Post | null> {
-  let fileContents: string | null = null
-
-  // Try Cloudinary first
-  if (isCloudinaryEnabled()) {
-    try {
-      fileContents = await getFileFromCloudinary(`journal/posts/${slug}`)
-    } catch (error) {
-      console.error('Error fetching post from Cloudinary:', error)
-    }
-  }
-
-  // Fallback to file system
-  if (!fileContents) {
-    try {
-      const fullPath = path.join(postsDirectory, `${slug}.md`)
-      if (!fs.existsSync(fullPath)) {
-        return null
-      }
-      fileContents = fs.readFileSync(fullPath, 'utf8')
-    } catch (error) {
-      console.error('Error reading post from file system:', error)
-      return null
-    }
+  if (!isFirebaseEnabled()) {
+    return [] // Return empty array if Firebase not configured (for build time)
   }
 
   try {
-    const { data, content } = matter(fileContents)
+    const db = getFirestoreDB()
+    const snapshot = await getDocs(collection(db, 'posts'))
+    return snapshot.docs.map((doc) => doc.id)
+  } catch (error) {
+    console.error('Error fetching post slugs from Firebase:', error)
+    return [] // Return empty array on error (for build time)
+  }
+}
+
+export async function getPostBySlug(slug: string): Promise<Post | null> {
+  if (!isFirebaseEnabled()) {
+    throw new Error('Firebase is not configured')
+  }
+
+  try {
+    const db = getFirestoreDB()
+    const docRef = doc(db, 'posts', slug)
+    const docSnap = await getDoc(docRef)
+
+    if (!docSnap.exists()) {
+      return null
+    }
+
+    const data = docSnap.data()
+    if (!data) {
+      return null
+    }
+
+    // Parse the content (stored as markdown with front matter)
+    const { data: frontMatter, content } = matter(data.content || '')
 
     // Strip markdown from excerpt for preview
-    const rawExcerpt = data.excerpt || content.substring(0, 200)
+    const rawExcerpt = frontMatter.excerpt || content.substring(0, 200)
     const plainTextExcerpt = stripMarkdown(rawExcerpt)
     const finalExcerpt = plainTextExcerpt.length > 150 
       ? plainTextExcerpt.substring(0, 150) + '...'
@@ -80,13 +57,13 @@ export async function getPostBySlug(slug: string): Promise<Post | null> {
 
     return {
       slug,
-      title: data.title || 'Untitled',
-      date: data.date || new Date().toISOString(),
+      title: frontMatter.title || data.title || 'Untitled',
+      date: frontMatter.date || data.date || new Date().toISOString(),
       excerpt: finalExcerpt,
       content,
     }
   } catch (error) {
-    console.error('Error reading post:', error)
+    console.error('Error fetching post from Firebase:', error)
     return null
   }
 }
@@ -104,6 +81,10 @@ export async function getPosts(): Promise<Post[]> {
 }
 
 export async function savePost(slug: string, title: string, content: string, excerpt?: string): Promise<void> {
+  if (!isFirebaseEnabled()) {
+    throw new Error('Firebase is not configured')
+  }
+
   // Strip markdown from excerpt if provided
   const rawExcerpt = excerpt || content.substring(0, 200)
   const plainTextExcerpt = stripMarkdown(rawExcerpt)
@@ -117,52 +98,36 @@ export async function savePost(slug: string, title: string, content: string, exc
     excerpt: finalExcerpt,
   }
 
+  // Store as markdown with front matter (same format as before)
   const fileContent = matter.stringify(content, frontMatter)
-  const filePath = `content/posts/${slug}.md`
 
-  // Try Cloudinary first (if enabled)
-  if (isCloudinaryEnabled()) {
-    try {
-      const buffer = Buffer.from(fileContent, 'utf8')
-      const result = await uploadToCloudinary(buffer, `${slug}.md`, 'journal/posts')
-      // Store successfully in Cloudinary
-      return
-    } catch (error) {
-      console.error('Error saving to Cloudinary, falling back:', error)
-      // Fall through to GitHub/file system
-    }
-  }
-
-  // Use GitHub API if enabled
-  if (isGitHubEnabled()) {
-    const success = await createOrUpdateFile(
-      filePath,
-      fileContent,
-      `Update post: ${title}`
-    )
-    if (!success) {
-      throw new Error('Failed to save post via GitHub API')
-    }
-  } else {
-    // Local file system (development)
-    if (!fs.existsSync(postsDirectory)) {
-      fs.mkdirSync(postsDirectory, { recursive: true })
-    }
-    const localPath = path.join(postsDirectory, `${slug}.md`)
-    fs.writeFileSync(localPath, fileContent, 'utf8')
+  try {
+    const db = getFirestoreDB()
+    const docRef = doc(db, 'posts', slug)
+    await setDoc(docRef, {
+      title,
+      date: new Date().toISOString(),
+      excerpt: finalExcerpt,
+      content: fileContent, // Store full markdown with front matter
+      updatedAt: new Date(),
+    })
+  } catch (error) {
+    console.error('Error saving post to Firebase:', error)
+    throw error
   }
 }
 
 export async function deletePost(slug: string): Promise<void> {
-  // Use Cloudinary in production, file system in local development
-  if (isCloudinaryEnabled()) {
-    await deleteFileFromCloudinary(`journal/posts/${slug}`)
-  } else {
-    // Local file system (development only)
-    const localPath = path.join(postsDirectory, `${slug}.md`)
-    if (fs.existsSync(localPath)) {
-      fs.unlinkSync(localPath)
-    }
+  if (!isFirebaseEnabled()) {
+    throw new Error('Firebase is not configured')
+  }
+
+  try {
+    const db = getFirestoreDB()
+    const docRef = doc(db, 'posts', slug)
+    await deleteDoc(docRef)
+  } catch (error) {
+    console.error('Error deleting post from Firebase:', error)
+    throw error
   }
 }
-

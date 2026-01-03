@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { writeFile } from 'fs/promises'
-import { join } from 'path'
 import { jwtVerify } from 'jose'
 import { uploadToCloudinary, isCloudinaryEnabled } from '@/lib/cloudinary'
 
@@ -36,41 +34,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (!isCloudinaryEnabled()) {
+      return NextResponse.json(
+        { error: 'Cloudinary is not configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET' },
+        { status: 500 }
+      )
+    }
+
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
 
-    // Use Cloudinary in production, local file system in development
-    if (isCloudinaryEnabled()) {
-      try {
-        const result = await uploadToCloudinary(buffer, file.name, 'journal')
-        return NextResponse.json({ url: result.secure_url })
-      } catch (error) {
-        console.error('Cloudinary upload error:', error)
-        return NextResponse.json(
-          { error: 'Failed to upload to Cloudinary' },
-          { status: 500 }
-        )
-      }
-    } else {
-      // Local file system (development)
-      const imagesDir = join(process.cwd(), 'public', 'images')
-      const { mkdir } = await import('fs/promises')
-      try {
-        await mkdir(imagesDir, { recursive: true })
-      } catch {
-        // Directory already exists
-      }
-
-      // Generate unique filename
-      const timestamp = Date.now()
-      const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
-      const filename = `${timestamp}-${sanitizedName}`
-      const filepath = join(imagesDir, filename)
-
-      await writeFile(filepath, buffer)
-
-      const url = `/images/${filename}`
-      return NextResponse.json({ url })
+    try {
+      const result = await uploadToCloudinary(buffer, file.name, 'journal')
+      return NextResponse.json({ url: result.secure_url })
+    } catch (error) {
+      console.error('Cloudinary upload error:', error)
+      return NextResponse.json(
+        { error: 'Failed to upload to Cloudinary' },
+        { status: 500 }
+      )
     }
   } catch (error) {
     console.error('Upload error:', error)
@@ -80,4 +62,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

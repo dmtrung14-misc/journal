@@ -114,7 +114,7 @@ export default function AdminDashboard() {
       <nav className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <h1 className="text-xl font-bold text-gray-900">Admin Dashboard</h1>
+            <h1 className="font-medium-logo text-2xl text-black hover:text-black">dmtrung14's WriterPad</h1>
             <div className="flex gap-4">
               <a
                 href="/"

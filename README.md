@@ -14,16 +14,13 @@ A personal blog platform where anyone can read posts, but only you (the admin) c
 
 ## Storage Strategy
 
-### Production: Cloudinary
-- **All files stored in Cloudinary** (markdown posts, images, profile data)
-- Free tier: 25GB storage, 25GB bandwidth/month
+### Firebase Firestore + Cloudinary
+- **Posts & Profile:** Firebase Firestore (free tier: 50K reads/day, 20K writes/day)
+- **Images:** Cloudinary (free tier: 25GB storage, 25GB bandwidth/month)
 - Edit posts directly in web UI - no git needed!
 - Fast CDN delivery for images
+- Real-time updates, no caching issues
 - See `DEPLOYMENT.md` for setup
-
-### Local Development
-- Files saved to local file system (`/content/posts/`, `/public/images/`)
-- Or use Cloudinary (same as production) - just add credentials to `.env.local`
 
 ### Authentication
 - Password hash stored in environment variable `ADMIN_PASSWORD_HASH`
@@ -52,8 +49,8 @@ A personal blog platform where anyone can read posts, but only you (the admin) c
    Then fill in the values:
    - Run `npm run setup` to generate `ADMIN_PASSWORD_HASH` and `JWT_SECRET`
    - Add the generated values to `.env.local`
-   - For local development, you can leave Cloudinary empty (uses file system)
-   - For production, Cloudinary is required - see `DEPLOYMENT.md` for setup
+   - Set up Firebase (see `ENV_SETUP.md`) - required
+   - Set up Cloudinary (see `ENV_SETUP.md`) - required for images
 
 4. **Run the development server:**
    ```bash
@@ -79,15 +76,16 @@ Posts support:
 
 ## Deployment
 
-**Cloudinary is required for production** - see `DEPLOYMENT.md` for detailed setup instructions.
+**Firebase and Cloudinary are required** - see `DEPLOYMENT.md` for detailed setup instructions.
 
 ### Quick Steps:
-1. Set up Cloudinary account (free)
-2. Deploy to [Vercel](https://vercel.com) or [Netlify](https://netlify.com)
-3. Add environment variables (see `DEPLOYMENT.md`)
-4. Deploy!
+1. Set up Firebase Firestore (free)
+2. Set up Cloudinary account (free, for images)
+3. Deploy to [Vercel](https://vercel.com) or [Netlify](https://netlify.com)
+4. Add environment variables (see `DEPLOYMENT.md`)
+5. Deploy!
 
-All files (posts, images, profile) are stored in Cloudinary - no git operations needed!
+Posts and profile stored in Firebase, images in Cloudinary - no git operations needed!
 
 ## Security Notes
 

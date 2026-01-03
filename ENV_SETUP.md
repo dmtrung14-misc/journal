@@ -13,25 +13,79 @@
    ```
    This outputs `ADMIN_PASSWORD_HASH` and `JWT_SECRET` - copy them to `.env.local`
 
-3. **For local development:**
-   - Just set `ADMIN_PASSWORD_HASH` and `JWT_SECRET`
-   - Leave Cloudinary empty (uses local file system)
-   - Files are saved to `/content/posts/` and `/public/images/`
-
-4. **For production (Vercel/Netlify):**
-   - Set ALL variables in your hosting platform's dashboard
-   - Cloudinary is **required** for production (file system is read-only)
+3. **Set up Firebase and Cloudinary:**
+   - See Firebase setup below
    - See Cloudinary setup below
 
-## Cloudinary Setup (Required for Production)
+4. **Add all variables to `.env.local`**
 
-Cloudinary is used to store both markdown files and images. Free tier includes 25GB storage and 25GB bandwidth/month.
+## Firebase Setup (Required)
+
+Firebase Firestore stores posts and profile data. Free tier includes 50K reads/day, 20K writes/day.
+
+### Step 1: Create Project
+
+1. Go to [Firebase Console](https://console.firebase.google.com)
+2. Click "Add project" or select existing project
+3. Follow the setup wizard
+
+### Step 2: Enable Firestore
+
+1. In Firebase Console, go to **Firestore Database**
+2. Click "Create database"
+3. Start in **test mode** (we'll set up security rules later if needed)
+4. Choose a location (pick closest to you)
+5. Click "Enable"
+
+### Step 3: Get Web App Configuration
+
+1. Go to **Project Settings** (gear icon) → **General** tab
+2. Scroll down to **Your apps** section
+3. Click the **Web** icon (`</>`) to add a web app
+4. Register your app (nickname: "Journal" or any name)
+5. Copy the Firebase configuration object
+
+You'll see something like:
+```javascript
+const firebaseConfig = {
+  apiKey: "AIzaSy...",
+  authDomain: "your-project.firebaseapp.com",
+  projectId: "your-project",
+  storageBucket: "your-project.firebasestorage.app",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abc123..."
+};
+```
+
+### Step 4: Add to Environment Variables
+
+**For local development (`.env.local`):**
+```env
+FIREBASE_API_KEY=AIzaSy...
+FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+FIREBASE_PROJECT_ID=your-project
+FIREBASE_STORAGE_BUCKET=your-project.firebasestorage.app
+FIREBASE_MESSAGING_SENDER_ID=123456789
+FIREBASE_APP_ID=1:123456789:web:abc123...
+```
+
+**For production (Vercel/Netlify dashboard):**
+1. Go to your project → Settings → Environment Variables
+2. Add each variable (same format as above)
+3. Select environment (Production, Preview, Development)
+4. Save
+
+## Cloudinary Setup (Required for Images)
+
+Cloudinary is used only for image uploads. Free tier includes 25GB storage and 25GB bandwidth/month.
 
 ### Step 1: Create Account
+
 1. Sign up at [cloudinary.com](https://cloudinary.com) (free)
 2. Verify your email
 
 ### Step 2: Get Credentials
+
 1. Go to Dashboard
 2. Find your credentials in the top section:
    - **Cloud Name** (e.g., `dxyz1234`)
@@ -39,13 +93,14 @@ Cloudinary is used to store both markdown files and images. Free tier includes 2
    - **API Secret** (click "Reveal" to see it)
 
 ### Step 3: Create Upload Preset
+
 1. Go to **Settings** → **Upload** → **Upload presets**
 2. Click **Add upload preset**
 3. Configure:
    - **Preset name:** `ml_default`
    - **Signing mode:** **Unsigned** (important!)
-   - **Folder:** Leave empty (we set it in code)
-   - **Resource type:** **Auto** or **Raw** (works for both images and text)
+   - **Folder:** `journal` (optional)
+   - **Resource type:** **Image**
 4. Click **Save**
 
 ### Step 4: Add to Environment Variables
@@ -59,21 +114,18 @@ CLOUDINARY_API_SECRET=your_api_secret
 
 **For production (Vercel dashboard):**
 1. Go to your project → Settings → Environment Variables
-2. Add each variable:
-   - `CLOUDINARY_CLOUD_NAME`
-   - `CLOUDINARY_API_KEY`
-   - `CLOUDINARY_API_SECRET`
+2. Add each variable
 3. Select environment (Production, Preview, Development)
 4. Save
 
-## How It Works
-
-- **Local Development:** If Cloudinary is not configured, files are saved to local file system
-- **Production:** Cloudinary is required (file system is read-only on serverless platforms)
-- Files are automatically detected and stored/retrieved from the appropriate location
-
 ## Storage Locations
 
-- **Markdown files:** `journal/posts/` folder in Cloudinary
-- **Images:** `journal/` folder in Cloudinary (or local `/public/images/` in development)
-- **Profile data:** `journal/profile.json` in Cloudinary (or local `/content/profile.json` in development)
+- **Posts:** Firestore collection `posts`
+- **Profile:** Firestore collection `profile` (document `default`)
+- **Images:** Cloudinary folder `journal/`
+
+## How It Works
+
+- **All data storage:** Firebase Firestore (no file system needed)
+- **All images:** Cloudinary (optimized CDN delivery)
+- **No fallbacks:** This setup works the same in development and production

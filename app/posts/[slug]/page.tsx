@@ -1,15 +1,12 @@
 import { notFound } from 'next/navigation'
-import { getPostBySlug, getPostSlugs } from '@/lib/posts'
+import { getPostBySlug } from '@/lib/posts'
 import MarkdownRenderer from '@/components/MarkdownRenderer'
 import { format } from 'date-fns'
 import Link from 'next/link'
+import Header from '@/components/Header'
 
-export async function generateStaticParams() {
-  const slugs = await getPostSlugs()
-  return slugs.map((slug) => ({
-    slug: slug.replace(/\.md$/, ''),
-  }))
-}
+// Dynamic rendering - posts are fetched from Firebase at request time
+export const dynamic = 'force-dynamic'
 
 export default async function PostPage({
   params,

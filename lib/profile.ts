@@ -1,12 +1,5 @@
-import fs from 'fs'
-import path from 'path'
-import {
-  uploadToCloudinary,
-  getFileFromCloudinary,
-  isCloudinaryEnabled,
-} from './cloudinary'
-
-const profilePath = path.join(process.cwd(), 'content', 'profile.json')
+import { getFirestoreDB, isFirebaseEnabled } from './firebase'
+import { doc, getDoc, setDoc } from 'firebase/firestore'
 
 export interface Profile {
   username: string
@@ -20,8 +13,8 @@ export interface Profile {
 
 const defaultProfile: Profile = {
   username: 'dmtrung14',
-  fullName: 'Dang Minh Trung',
-  description: 'Welcome to my journal. Thoughts, ideas, and stories.',
+  fullName: 'Trung Dang',
+  description: 'Random thoughts here. My technical blog is still at https://dmtrung.com/blogs',
   profilePic: '/images/profile_pics.png',
   banner: '',
   followers: 0,
@@ -29,50 +22,45 @@ const defaultProfile: Profile = {
 }
 
 export async function getProfile(): Promise<Profile> {
-  // Try Cloudinary first
-  if (isCloudinaryEnabled()) {
-    try {
-      const content = await getFileFromCloudinary('journal/profile.json')
-      if (content) {
-        return { ...defaultProfile, ...JSON.parse(content) }
-      }
-    } catch (error) {
-      console.error('Error reading profile from Cloudinary:', error)
-    }
+  if (!isFirebaseEnabled()) {
+    throw new Error('Firebase is not configured')
   }
 
-  // Fallback to file system
   try {
-    if (fs.existsSync(profilePath)) {
-      const content = fs.readFileSync(profilePath, 'utf8')
-      return { ...defaultProfile, ...JSON.parse(content) }
+    const db = getFirestoreDB()
+    const docRef = doc(db, 'profile', 'default')
+    const docSnap = await getDoc(docRef)
+
+    if (docSnap.exists() && docSnap.data()) {
+      return { ...defaultProfile, ...docSnap.data() } as Profile
     }
+
+    // Create default profile if it doesn't exist
+    await setDoc(docRef, defaultProfile)
+    return defaultProfile
   } catch (error) {
-    console.error('Error reading profile:', error)
+    console.error('Error reading profile from Firebase:', error)
+    return defaultProfile
   }
-  return defaultProfile
 }
 
 export async function saveProfile(profile: Partial<Profile>): Promise<void> {
+  if (!isFirebaseEnabled()) {
+    throw new Error('Firebase is not configured')
+  }
+
   try {
     const currentProfile = await getProfile()
     const updatedProfile = { ...currentProfile, ...profile }
-    const content = JSON.stringify(updatedProfile, null, 2)
 
-    // Use Cloudinary in production, file system in local development
-    if (isCloudinaryEnabled()) {
-      const buffer = Buffer.from(content, 'utf8')
-      await uploadToCloudinary(buffer, 'profile.json', 'journal')
-    } else {
-      // Local file system (development only)
-      const dir = path.dirname(profilePath)
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true })
-      }
-      fs.writeFileSync(profilePath, content, 'utf8')
-    }
+    const db = getFirestoreDB()
+    const docRef = doc(db, 'profile', 'default')
+    await setDoc(docRef, {
+      ...updatedProfile,
+      updatedAt: new Date(),
+    })
   } catch (error) {
-    console.error('Error saving profile:', error)
+    console.error('Error saving profile to Firebase:', error)
     throw error
   }
 }
