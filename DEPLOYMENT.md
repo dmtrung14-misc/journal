@@ -33,7 +33,33 @@ Both are free tier friendly!
    - Click "Create database"
    - Start in **test mode** (for now)
    - Choose a location
-4. Get Web App configuration:
+4. **CRITICAL: Configure Firestore Security Rules**
+   - Go to Firestore Database → Rules tab
+   - Replace the rules with this (allows public read, prevents public write):
+   ```javascript
+   rules_version = '2';
+   service cloud.firestore {
+     match /databases/{database}/documents {
+       // Allow public read access to posts and profile
+       match /posts/{postId} {
+         allow read: if true;
+         allow write: if false; // Writes are handled by your admin auth
+       }
+       match /profile/{profileId} {
+         allow read: if true;
+         allow write: if false; // Writes are handled by your admin auth
+       }
+       
+       // Deny all other access
+       match /{document=**} {
+         allow read, write: if false;
+       }
+     }
+   }
+   ```
+   - Click "Publish" to save the rules
+   - **Important**: Without these rules, posts won't load in production!
+5. Get Web App configuration:
    - Go to Project Settings → General
    - Scroll to "Your apps" → Click Web icon (`</>`)
    - Register app and copy the config values
@@ -80,6 +106,25 @@ Both are free tier friendly!
    - Publish directory: `.next`
 4. Add environment variables (same as Vercel)
 5. Deploy!
+
+## Troubleshooting
+
+### Posts not showing in production but work locally?
+
+**Most likely cause: Firestore Security Rules**
+
+1. Check Vercel/Netlify logs for `permission-denied` errors
+2. Verify your Firestore security rules allow public read access (see step 4 above)
+3. Go to Firebase Console → Firestore Database → Rules
+4. Make sure rules are published (not just saved)
+5. Rules should allow `allow read: if true` for `posts` and `profile` collections
+
+**Other common issues:**
+
+- Environment variables not set in Vercel/Netlify dashboard
+- Firestore database not created (only API enabled)
+- Wrong Firebase project ID in environment variables
+- Check browser console and server logs for detailed error messages
 
 ## After Deployment
 

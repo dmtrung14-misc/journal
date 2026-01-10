@@ -38,8 +38,14 @@ export async function getProfile(): Promise<Profile> {
     // Create default profile if it doesn't exist
     await setDoc(docRef, defaultProfile)
     return defaultProfile
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error reading profile from Firebase:', error)
+    console.error('Error code:', error?.code)
+    console.error('Error message:', error?.message)
+    // If it's a permission error, log it prominently
+    if (error?.code === 'permission-denied') {
+      console.error('PERMISSION DENIED: Check your Firestore security rules! Profile collection must allow read access.')
+    }
     return defaultProfile
   }
 }

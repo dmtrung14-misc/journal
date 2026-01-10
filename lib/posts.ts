@@ -13,15 +13,23 @@ export interface Post {
 
 export async function getPostSlugs(): Promise<string[]> {
   if (!isFirebaseEnabled()) {
+    console.warn('Firebase is not configured - returning empty post list')
     return [] // Return empty array if Firebase not configured (for build time)
   }
 
   try {
     const db = getFirestoreDB()
     const snapshot = await getDocs(collection(db, 'posts'))
+    console.log(`Fetched ${snapshot.docs.length} posts from Firebase`)
     return snapshot.docs.map((doc) => doc.id)
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching post slugs from Firebase:', error)
+    console.error('Error code:', error?.code)
+    console.error('Error message:', error?.message)
+    // If it's a permission error, log it prominently
+    if (error?.code === 'permission-denied') {
+      console.error('PERMISSION DENIED: Check your Firestore security rules! Posts collection must allow read access.')
+    }
     return [] // Return empty array on error (for build time)
   }
 }
@@ -62,8 +70,14 @@ export async function getPostBySlug(slug: string): Promise<Post | null> {
       excerpt: finalExcerpt,
       content,
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching post from Firebase:', error)
+    console.error('Error code:', error?.code)
+    console.error('Error message:', error?.message)
+    // If it's a permission error, log it prominently
+    if (error?.code === 'permission-denied') {
+      console.error('PERMISSION DENIED: Check your Firestore security rules! Posts collection must allow read access.')
+    }
     return null
   }
 }
