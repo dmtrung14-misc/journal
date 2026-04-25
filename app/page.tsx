@@ -4,6 +4,9 @@ import { format } from 'date-fns'
 import Header from '@/components/Header'
 import ProfileHeader from '@/components/ProfileHeader'
 
+// Match /posts/[slug]: fetch posts at request time so new Firestore posts appear without redeploy
+export const dynamic = 'force-dynamic'
+
 export default async function Home() {
   const posts = await getPosts()
 
